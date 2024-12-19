@@ -24,6 +24,7 @@ type ModAction struct {
 	ID      string     `json:"id,omitempty"`
 	Action  string     `json:"action,omitempty"`
 	Created *Timestamp `json:"created_utc,omitempty"`
+	Details string     `json:"details,omitempty"`
 
 	Moderator string `json:"mod,omitempty"`
 	// Not the full ID, just the ID36.
