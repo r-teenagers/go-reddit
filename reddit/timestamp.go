@@ -36,6 +36,9 @@ func (t *Timestamp) UnmarshalJSON(data []byte) (err error) {
 		t.Time = time.Unix(int64(f), 0).UTC()
 	} else {
 		t.Time, err = time.Parse(`"`+time.RFC3339+`"`, str)
+		if err != nil {
+			t.Time, err = time.Parse(`"2006-01-02T15:04:05.999999999+0000"`, str)
+		}
 	}
 
 	return

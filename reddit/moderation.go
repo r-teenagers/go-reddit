@@ -492,3 +492,163 @@ func (s *ModerationService) Undistinguish(ctx context.Context, id string) (*Resp
 
 	return s.client.Do(ctx, req, nil)
 }
+
+type ModmailParticipant struct {
+}
+
+type ModmailOwner struct {
+	DisplayName string `json:"displayName,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Id          string `json:"id,omitempty"`
+}
+
+type ModmailMessage struct {
+	Body            string             `json:"body"`
+	Author          ModmailParticipant `json:"author"`
+	IsInternal      bool               `json:"isInternal"`
+	Date            Timestamp          `json:"date"`
+	BodyMarkdown    string             `json:"bodyMarkdown"`
+	Id              string             `json:"id"`
+	ParticipatingAs string             `json:"participatingAs"`
+}
+
+type Modmail struct {
+	FullyLoaded bool
+
+	Id                   string                 `json:"id"`
+	IsAuto               bool                   `json:"isAuto,omitempty"`
+	Participant          ModmailParticipant     `json:"participant,omitempty"`
+	IsRepliable          bool                   `json:"isRepliable,omitempty"`
+	IsInternal           bool                   `json:"isInternal,omitempty"`
+	LastModUpdate        Timestamp              `json:"lastModUpdate,omitempty"`
+	Authors              []ModmailParticipant   `json:"authors,omitempty"`
+	LastUpdated          Timestamp              `json:"lastUpdated,omitempty"`
+	ParticipantSubreddit map[string]interface{} `json:"participantSubreddit,omitempty"`
+	State                int                    `json:"state,omitempty"`
+	ConversationType     string                 `json:"conversationType,omitempty"`
+	LastUnread           Timestamp              `json:"lastUnread,omitempty"`
+	Owner                ModmailOwner           `json:"owner,omitempty"`
+	Subject              string                 `json:"subject,omitempty"`
+	IsHighlighted        bool                   `json:"isHighlighted,omitempty"`
+	NumMessages          int                    `json:"numMessages,omitempty"`
+	ObjIds               []struct {
+		Id  string
+		Key string
+	}
+
+	Messages []ModmailMessage
+}
+
+type ListModmailOptions struct {
+	// Maximum number of items to be returned.
+	// The default is 25 and max is 100.
+	Limit int `url:"limit,omitempty"`
+
+	// The full ID of an item in the listing to use
+	// as the anchor point of the list. Only items
+	// appearing after it will be returned.
+	After string `url:"after,omitempty"`
+
+	// Comma separated list of subreddit names.
+	Entity string `url:"entity,omitempty"`
+
+	// One of "recent", "mod", "user", "unread"
+	Sort string `url:"sort,omitempty"`
+
+	// One of "all", "appeals", "notifications", "inbox", "filtered", "inprogress", "mod",
+	// "archived", "default", "highlighted", "join_requests", "new"
+	State string `url:"state,omitempty"`
+}
+
+func (m *ModerationService) GetModmail(ctx context.Context, subreddit string, opts ListModmailOptions) ([]Modmail, *Response, error) {
+	path, err := addOptions("api/mod/conversations", opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := m.client.NewRequest(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	root := new(struct {
+		Conversation map[string]Modmail        `json:"conversations"`
+		Messages     map[string]ModmailMessage `json:"messages"`
+	})
+	_ = root
+
+	resp, err := m.client.Do(ctx, req, root)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	conversations := make([]Modmail, 0, len(root.Conversation))
+	for _, m := range root.Conversation {
+		for _, obj := range m.ObjIds {
+			if obj.Key != "messages" {
+				continue
+			}
+
+			message, ok := root.Messages[obj.Id]
+			if !ok {
+				continue
+			}
+
+			m.Messages = append(m.Messages, message)
+		}
+
+		conversations = append(conversations, m)
+	}
+
+	return conversations, resp, nil
+}
+
+func (m *ModerationService) ReloadModmail(ctx context.Context, modmail *Modmail, markRead bool) error {
+	path := fmt.Sprintf("api/mod/conversations/%s", modmail.Id)
+
+	opts := new(struct {
+		markRead bool
+	})
+	opts.markRead = markRead
+
+	path, err := addOptions(path, opts)
+	if err != nil {
+		return err
+	}
+
+	req, err := m.client.NewRequest(http.MethodGet, path, nil)
+	if err != nil {
+		return err
+	}
+
+	root := new(struct {
+		Conversation Modmail                   `json:"conversation"`
+		Messages     map[string]ModmailMessage `json:"messages"`
+	})
+	_ = root
+
+	_, err = m.client.Do(ctx, req, root)
+	if err != nil {
+		return err
+	}
+
+	*modmail = root.Conversation
+	msgs := make([]ModmailMessage, 0, modmail.NumMessages)
+
+	for _, obj := range modmail.ObjIds {
+		if obj.Key != "messages" {
+			continue
+		}
+
+		message, ok := root.Messages[obj.Id]
+		if !ok {
+			continue
+		}
+
+		msgs = append(msgs, message)
+	}
+
+	modmail.Messages = msgs
+	modmail.FullyLoaded = true
+	return nil
+}
