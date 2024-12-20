@@ -495,6 +495,15 @@ func (s *ModerationService) Undistinguish(ctx context.Context, id string) (*Resp
 }
 
 type ModmailParticipant struct {
+	IsMod         bool   `json:"isMod"`
+	IsAdmin       bool   `json:"isAdmin"`
+	Name          string `json:"name"`
+	IsOp          bool   `json:"isOp"`
+	IsParticipant bool   `json:"isParticipant"`
+	IsApproved    bool   `json:"isApproved"`
+	IsHidden      bool   `json:"isHidden"`
+	Id            string `json:"id"`
+	IsDeleted     bool   `json:"isDeleted"`
 }
 
 type ModmailOwner struct {
